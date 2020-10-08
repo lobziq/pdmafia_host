@@ -29,6 +29,7 @@ class Ability(Enum):
     CHECK_FRACTION = 10
     CHECK_ROLE = 11
     PRIORITY_KILL = 12
+    SECONDARY_KILL = 13
 
 
 @dataclass
@@ -55,9 +56,9 @@ class Vote:
 
 @dataclass
 class NightMove:
-    initiator: Player
-    targets: List[Player]
-    ability: List[Ability]
+    initiator: str
+    target: str
+    ability: Ability
 
 
 @dataclass

@@ -24,11 +24,6 @@ class Period:
     players: List[Player] = field(default_factory=list)
     player_state_changes: List[PlayerStateChange] = field(default_factory=list)
 
-
-@dataclass
-class Day(Period):
-    votes: List[Vote] = field(default_factory=list)
-
     def get_player(self, nickname: str) -> Optional[Player]:
         for p in self.players:
             if p.nickname == nickname:
@@ -36,8 +31,13 @@ class Day(Period):
 
 
 @dataclass
+class Day(Period):
+    votes: List[Vote] = field(default_factory=list)
+
+
+@dataclass
 class Night(Period):
-    players: List[Player] = field(default_factory=list)
+    moves: List[NightMove] = field(default_factory=list)
 
 
 test_setting = Setting(name='test setting name',
@@ -45,7 +45,11 @@ test_setting = Setting(name='test setting name',
                        roles=[Role(name='шериф',
                                    description='test role sheriff',
                                    fraction=Fraction.CITY,
-                                   abilities=[Ability.CHECK_ROLE]),
+                                   abilities=[Ability.CHECK_FRACTION]),
+                              Role(name='медик',
+                                   description='test role medic',
+                                   fraction=Fraction.CITY,
+                                   abilities=[Ability.HEAL]),
                               Role(name='мафия исполнитель',
                                    description='test role killer',
                                    fraction=Fraction.MAFIA,
@@ -54,8 +58,8 @@ test_setting = Setting(name='test setting name',
                                    description='test role blocker',
                                    fraction=Fraction.MAFIA,
                                    abilities=[Ability.BLOCK]),
-                              Role(name='мафия сайленсер',
-                                   description='test role silencer',
+                              Role(name='мафия чекер на активность',
+                                   description='test role check_activity',
                                    fraction=Fraction.MAFIA,
                                    abilities=[Ability.SILENCE])
                               ]
@@ -73,7 +77,7 @@ class Game:
         self.nights: List[Night] = list()
         self.setting: Setting = test_setting  # TODO DISPATCH SETTING
         self.next_day_votes: Set[Vote] = set()
-        self.next_night_moves: Set[NightMove] = set()
+        self.night_moves: List[NightMove] = list()
 
     def dispatch_setting(self):
         pass
@@ -140,14 +144,64 @@ class Game:
                 targets.append(nick)
 
         kicked_player = self.get_current_day().get_player(choice(targets))
-        self.get_current_day().player_state_changes.append(PlayerStateChange(kicked_player, kicked_player.status, kicked_player.status.union([PlayerState.DEAD])))
+        self.get_current_day().player_state_changes.append(PlayerStateChange(kicked_player, kicked_player.status, {PlayerState.DEAD}))
+
+    @staticmethod
+    def apply_player_state_changes(players: List[Player], player_state_changes: List[PlayerStateChange]):
+        changed_players = players.copy()
+        for sc in player_state_changes:
+            if sc.player in changed_players and PlayerState.DEAD in sc.new:
+                changed_players.remove(sc.player)
+
+        return changed_players
 
     def start_night(self, remaining_players: List[Player]):
         self.nights.append(Night(players=remaining_players))
 
-    def night_move(self, nickname: str, target: str, ability_name: str):
-        pass
+        # все состояния кроме "ЖИВОЙ" снимаются, был в клетке - вышел, сало - снимается
+        for p in self.get_current_night().players:
+            p.status = {PlayerState.ALIVE}
+
+    def night_move(self, nickname: str, target: str, ability_name: str = None):
+        if not self.get_current_day().get_player(nickname):
+            return
+
+        if not self.get_current_day().get_player(nickname).role:
+            return
+
+        self.night_moves = [move for move in self.night_moves if move.initiator != nickname]
+        if self.get_current_day().get_player(target):
+            self.night_moves.append(NightMove(initiator=nickname, target=target, ability=self.get_current_day().get_player(nickname).role.abilities[0]))
+
+    @staticmethod
+    def get_move_targets(moves: List[NightMove]) -> List[str]:
+        return [a.target for a in moves]
 
     def dispatch_night(self):
-        pass
-        # self.next_night_moves
+        # мертвые не ходят
+        self.get_current_night().night_moves = [m for m in self.night_moves if self.get_current_night().get_player(m.initiator)]
+
+        # блок первым
+        performed_moves: List[NightMove] = [m for m in self.night_moves if m.ability == Ability.BLOCK]
+
+        # теперь килл маньяка, если он не в блоке
+        for move in [m for m in self.night_moves if m.ability == Ability.PRIORITY_KILL and m.initiator not in Game.get_move_targets(performed_moves)]:
+            performed_moves.append(move)
+
+        # остальной пул абилок, которые проходят, если в чела не въехал маньяк или он не в блоке
+        for move in [m for m in self.night_moves if m.ability in [Ability.KILL, Ability.SECONDARY_KILL, Ability.HEAL,
+                                                                  Ability.CHECK_ROLE, Ability.CHECK_ACTIVITY, Ability.CHECK_FRACTION,
+                                                                  Ability.SILENCE, Ability.SURVEIL_IN, Ability.SURVEIL_OUT]]:
+            # для читаемости отдельно
+            if move.initiator not in Game.get_move_targets(performed_moves):
+                performed_moves.append(move)
+
+        for nickname in Game.get_move_targets([m for m in performed_moves if m.ability in [Ability.KILL, Ability.SECONDARY_KILL, Ability.PRIORITY_KILL]]):
+            # TODO возвращать резалты
+
+            if nickname not in Game.get_move_targets([m for m in performed_moves if m.ability in [Ability.HEAL]]):
+                # чувака убивали и не похилили - меняем ему состояние на "МЕРТВЫЙ"
+                player = self.get_current_night().get_player(nickname)
+                self.get_current_night().player_state_changes.append(PlayerStateChange(player, player.status, {PlayerState.DEAD}))
+            else:
+                pass
