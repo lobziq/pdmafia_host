@@ -134,6 +134,7 @@ class Game:
         for v in self.get_current_day().votes:
             target_votes[v.initiator] = v.target
 
+        # TODO изящный однострочник сюда
         max_votecount = 0
         targets = list()
         for nick, votecount in Counter(target_votes.values()).items():
@@ -205,3 +206,7 @@ class Game:
                 self.get_current_night().player_state_changes.append(PlayerStateChange(player, player.status, {PlayerState.DEAD}))
             else:
                 pass
+
+        for nickname in Game.get_move_targets([m for m in performed_moves if m.ability == Ability.SILENCE]):
+            player = self.get_current_night().get_player(nickname)
+
