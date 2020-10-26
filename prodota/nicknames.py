@@ -2,7 +2,8 @@ from transliterate import translit
 from typing import List, Set
 
 mappings = {
-    '0': 'o'
+    '0': 'o',
+    '.': ''
 }
 
 
