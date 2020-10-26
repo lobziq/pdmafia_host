@@ -145,7 +145,8 @@ class Prodota:
         print(data)
 
         async with self.session.post(f'{self.base_url}/messenger/compose/', data=data) as response:
-            print('PRIVATE MESSAGE COMPOSED' + response.status)
+            # TODO LOGGING
+            print(f'pm result {response.status}')
 
     async def authorize(self, login: str = None, password: str = None):
         if not login:
