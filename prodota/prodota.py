@@ -105,11 +105,47 @@ class Prodota:
         }
 
         async with self.session.post(f'https://prodota.ru/forum/topic/217907/page/770/', data=data) as response:
-            #TODO LOGGING
+            # TODO LOGGING
             print(f'post result {response.status}')
 
     async def get_latest_page(self, topic_id: int):
         pass
+
+    async def private_message(self, text: str, title: str, targets: List[str]):
+        async with self.session.get(f'{self.base_url}/messenger/') as response:
+            html = await response.text()
+            soup = bs4.BeautifulSoup(html, features='html.parser')
+
+            for a in soup.find_all('a'):
+                if 'href' in a.attrs and 'csrfKey=' in a['href'] and '&' not in a['href']:
+                    csrf_key_compose = a['href'].split('csrfKey=')[-1]
+                    print(csrf_key_compose)
+                    break
+
+        async with self.session.get(f'{self.base_url}/messenger/compose/?csrfKey={csrf_key_compose}') as response:
+            # TODO HANDLE EXCEPTIONS
+            html = await response.text()
+            soup = bs4.BeautifulSoup(html, features='html.parser')
+            csrf_key = soup.find('input', {'name': 'csrfKey'})['value']
+            plupload = soup.find('input', {'name': 'plupload'})['value']
+            max_file_size = soup.find('input', {'name': 'MAX_FILE_SIZE'})['value']
+
+        data = {
+            'form_submitted': 1,
+            'csrfKey': csrf_key,
+            'MAX_FILE_SIZE': max_file_size,
+            'plupload': plupload,
+            'messenger_to_original': '',
+            'messenger_to': '\n'.join(targets),
+            'messenger_title': title,
+            'messenger_content': text,
+            'messenger_content_upload': '67b121390ac1f5f3eb484a60092c9640'
+        }
+
+        print(data)
+
+        async with self.session.post(f'{self.base_url}/messenger/compose/', data=data) as response:
+            print('PRIVATE MESSAGE COMPOSED' + response.status)
 
     async def authorize(self, login: str = None, password: str = None):
         if not login:
@@ -138,3 +174,4 @@ class Prodota:
             if response.status == 200:
                 # TODO LOGGING
                 print('authorized')
+
